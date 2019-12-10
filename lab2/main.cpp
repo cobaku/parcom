@@ -1,139 +1,70 @@
-#include "random"
-#include "map"
-#include "chrono"
-#include "omp.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdexcept>
+#include <map>
+#include <math.h>
+#include <omp.h>
 
-#define ARRAY_SIZE 15000
-#define REQUIRED_NUMBER 42
+#define INPUT_SIZE 500
 
-int *create_array(int size) {
-    std::random_device rd;
-    std::mt19937 mt(rd());
-    std::uniform_real_distribution<double> dist(0.0, 100.0);
-
-    int *array = new int[size];
-    for (int i = 0; i < size; i++) {
-        array[i] = dist(mt);
+int *readSet(char *filename) {
+    FILE *fp = fopen(filename, "r");
+    if (fp == nullptr) {
+        throw std::runtime_error("Incorrect file path");
     }
-
-    printf("[");
-    for (int i = 0; i < size; i++) {
-        printf("%d, ", array[i]);
-        if (i % 20 == 0) {
-            printf("\n");
-        }
-    }
-    printf("] \n");
-    return array;
-}
-
-std::map<int, int> count_numbers(int *array, int size) {
-    std::map<int, int> result;
-    for (int i = 0; i < size; ++i) {
-        auto pair = result.find(array[i]);
-        if (pair != result.end()) {
-            result.erase(array[i]);
-            result.insert(std::pair<int, int>(array[i], pair->second + 1));
-        } else {
-            result.insert(std::pair<int, int>(array[i], 1));
-        }
+    int *result = new int[INPUT_SIZE];
+    for (int i = 0; i < INPUT_SIZE; i++) {
+        fscanf(fp, "%d", (result + i));
     }
     return result;
 }
 
+void subsets(int *numbers, int target, int size) {
+    int *pows = new int[size];
 
-void fix_map(std::map<int, int> *map, int max_value) {
-    for (auto it = map->cbegin(); it != map->cend();) {
-        if (it->first >= max_value || it->first <= 0) {
-            map->erase(it++);
-        } else {
-            ++it;
-        }
+    #pragma omp parallel for
+    for (int i = 0; i < size; ++i) {
+        pows[i] = (int) pow(2, i);
     }
-}
 
-int solve(std::map<int, int> *map, int required_value, int elementsInMap) {
-    int packs = 0;
-    int value = required_value;
-#pragma omp parallel for
-    for (long i = 0; i < elementsInMap; i++) {
-        value = value - (--map->end())->first;
-        (--map->end())->second = (--map->end())->second - 1;
-#pragma omp critical
-        if ((--map->end())->second == 0) {
-            map->erase((--map->end())->first);
-        }
-        if (value - map->begin()->first == 0) {
-            packs++;
-            value = required_value;
-            map->begin()->second = map->begin()->second - 1;
-#pragma omp critical
-            if (map->begin()->second == 0) {
-                map->erase(map->begin()->first);
-            }
-        } else {
-            if (map->begin()->first == value) {
-                value = required_value;
-                packs++;
-                map->begin()->second = map->begin()->second - 1;
-#pragma omp critical
-                if (map->begin()->second == 0) {
-                    map->erase(map->begin()->first);
-                }
-                continue;
-            } else if (map->begin()->first < value) {
-                int initial = value;
-                for (int j = 0; j < initial; ++j) {
-                    value = value - map->begin()->first;
-                    map->begin()->second = map->begin()->second - 1;
-#pragma omp critical
-                    if (map->begin()->second == 0) {
-                        map->erase(map->begin()->first);
-                    }
-                    if (value == 0) {
-                        packs++;
-                        value = required_value;
-                        continue;
-                    } else if (value < 0) {
-                        value = required_value;
-                        continue;
+    int s = 0;
+
+    #pragma omp parallel for
+    for (int i = 0; i < size; ++i) {
+        if (pows[i] & target) {
+            for (int j = 0; j < size; ++j) {
+                if (pows[i] & numbers[j]) {
+                    printf("%d ", numbers[j]);
+                    s += numbers[j];
+                    if (s >= target) {
+                        printf("\n");
+                        s = 0;
                     }
                 }
-            } else {
-                value = required_value;
             }
         }
     }
 
-    return packs;
+    delete[] pows;
 }
 
-
-int main() {
-    int *given_array = create_array(ARRAY_SIZE);
-    std::map<int, int> numbers = count_numbers(given_array, ARRAY_SIZE);
-    fix_map(&numbers, REQUIRED_NUMBER);
-
-    int elements_in_map = 0;
-    printf("\n Pairs for value search:\n");
-    for (auto i = numbers.begin(); i != numbers.end(); i++) {
-        printf("Key: %d, Count: %d\n", i->first, i->second);
-        elements_in_map += i->second;
+/**
+ * Run: ./out input_filename target
+ * @param argc
+ * @param argv
+ * @return
+ */
+int main(int argc, char *argv[]) {
+    if (argc != 3) {
+        throw std::runtime_error("Run: ./out input_filename target");
     }
 
-    printf("In map %d elements \n", elements_in_map);
+    int *input = readSet(argv[1]);
+    int target = strtol(argv[2], NULL, 10);
 
-    auto exec_start_time = std::chrono::high_resolution_clock::now();
-
-    int subsets = solve(&numbers, REQUIRED_NUMBER, elements_in_map);
-
-    auto exec_stop_time = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(exec_stop_time - exec_start_time).count();
-
-    printf("Found %d subsets\n", subsets);
-    printf("Took %lldl microseconds", duration);
-
-    numbers.clear();
-    delete given_array;
+    double exec_start_time = omp_get_wtime();
+    subsets(input, target, INPUT_SIZE);
+    double duration = omp_get_wtime() - exec_start_time;
+    printf("\nTook %fl seconds", duration);
     return 0;
 }

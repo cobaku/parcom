@@ -21,12 +21,11 @@ int *readSet(char *filename) {
 
 void subsets(int *numbers, int target, int size) {
     int *pows = new int[size];
-
     for (int i = 0; i < size; ++i) {
         pows[i] = (int) pow(2, i);
     }
-    int s = 0;
 
+    int s = 0;
     for (int i = 0; i < size; ++i) {
         if (pows[i] & target) {
             for (int j = 0; j < size; ++j) {
